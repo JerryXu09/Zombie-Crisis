@@ -1,7 +1,8 @@
 
-import React, { useEffect, useRef } from 'react';
-import { GameState, RadioMessage, ToolType, EntityType, WeaponType } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { GameState, RadioMessage, ToolType, EntityType, WeaponType, SoundType } from '../types';
 import { GAME_CONSTANTS, WEAPON_STATS } from '../constants';
+import { audioService } from '../services/audioService';
 
 interface UIOverlayProps {
   gameState: GameState;
@@ -14,12 +15,18 @@ interface UIOverlayProps {
 
 const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedTool, onSelectTool, onTogglePause, onReset }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [, setTick] = useState(0); // Force re-render for cooldown timers
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [radioLogs]);
+
+  useEffect(() => {
+      const interval = setInterval(() => setTick(t => t + 1), 100);
+      return () => clearInterval(interval);
+  }, []);
 
   const totalPop = gameState.healthyCount + gameState.infectedCount + gameState.soldierCount;
   const pctHealthy = totalPop > 0 ? (gameState.healthyCount / totalPop) * 100 : 0;
@@ -30,6 +37,82 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
       if (!entity.isArmed) return null;
       const wType = entity.weaponType || WeaponType.PISTOL;
       return WEAPON_STATS[wType];
+  };
+
+  const renderInspector = () => {
+      if (!gameState.selectedEntity) return null;
+      const ent = gameState.selectedEntity;
+      
+      if (ent.isDead) {
+          return (
+            <div className="absolute top-28 right-4 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-600 rounded-xl p-4 shadow-2xl z-30 pointer-events-auto grayscale">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
+                    <h3 className="text-sm font-bold text-slate-400 tracking-wider uppercase">目标已确认死亡</h3>
+                    <div className="w-3 h-3 bg-slate-600 rounded-sm rotate-45"></div>
+                </div>
+                <div className="space-y-2 opacity-70">
+                    <div className="flex justify-between items-end">
+                        <span className="text-2xl font-black text-slate-300 line-through">{ent.name}</span>
+                        <span className="text-xs text-slate-500 mb-1">{ent.gender} / {ent.age}岁</span>
+                    </div>
+                    <div className="text-xs text-slate-500 italic">尸体 (DECEASED)</div>
+                </div>
+            </div>
+          );
+      }
+
+      return (
+        <div className="absolute top-28 right-4 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-500/50 rounded-xl p-4 shadow-2xl z-30 pointer-events-auto transition-all duration-200 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
+                <h3 className="text-sm font-bold text-white tracking-wider uppercase">个体信息识别</h3>
+                <div className={`w-3 h-3 rounded-full animate-pulse ${ent.type === EntityType.ZOMBIE ? 'bg-red-500' : ent.type === EntityType.SOLDIER ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+            </div>
+            
+            <div className="space-y-2">
+                <div className="flex justify-between items-end">
+                    <span className="text-2xl font-black text-white">{ent.name}</span>
+                    <span className="text-xs text-slate-400 mb-1">{ent.gender} / {ent.age}岁</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-300">
+                        {ent.type === EntityType.ZOMBIE ? '已感染 (ZOMBIE)' : ent.type === EntityType.SOLDIER ? '特种兵 (SPEC OPS)' : '平民 (CIVILIAN)'}
+                    </span>
+                    {ent.isMedic && <span className="text-[10px] font-bold bg-white text-red-600 px-2 py-0.5 rounded">医疗兵</span>}
+                    {ent.isTrapped && <span className="text-[10px] font-bold bg-cyan-500 text-black px-2 py-0.5 rounded animate-pulse">被困 ({(ent.trappedTimer/1000).toFixed(1)}s)</span>}
+                </div>
+
+                {ent.isArmed && getWeaponInfo(ent) && (
+                    <div className="bg-slate-800/50 border border-slate-700 p-2 rounded flex items-center justify-between mt-1">
+                        <div className="flex flex-col">
+                             <span className="text-[10px] text-yellow-400 font-bold uppercase">{getWeaponInfo(ent).name}</span>
+                             <span className="text-[8px] text-slate-400">{getWeaponInfo(ent).description}</span>
+                        </div>
+                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: getWeaponInfo(ent).color}}></div>
+                    </div>
+                )}
+
+                {/* Health Bar */}
+                <div className="mt-2">
+                    <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+                        <span>生命值</span>
+                        <span>{Math.max(0, Math.floor(ent.health))}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-300 ${ent.health < 5 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{width: `${Math.min(100, Math.max(0, ent.health * 5))}%`}}></div>
+                    </div>
+                </div>
+
+                {/* Thoughts Bubble */}
+                <div className="mt-4 relative bg-slate-800 p-3 rounded-lg rounded-tl-none border border-slate-700">
+                    <div className="absolute -top-2 left-0 w-0 h-0 border-l-[10px] border-l-slate-800 border-t-[10px] border-t-transparent transform rotate-90"></div>
+                    <p className="text-xs italic text-slate-300 leading-relaxed">
+                        "{ent.thought}"
+                    </p>
+                </div>
+            </div>
+        </div>
+      );
   };
 
   return (
@@ -43,7 +126,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                 僵尸危机 <span className="text-red-500">行动代号Z</span>
                 </h1>
                 <button 
-                    onClick={onTogglePause}
+                    onClick={() => { audioService.playSound(SoundType.UI_CLICK); onTogglePause(); }}
                     className={`
                         min-w-[120px] h-8 px-4 rounded font-bold text-xs uppercase tracking-wider border transition-all flex items-center justify-center whitespace-nowrap
                         ${gameState.isPaused 
@@ -57,7 +140,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
              </div>
              <div className="flex items-center gap-3 bg-slate-800 px-4 py-1.5 rounded-lg border border-slate-600 shadow-inner">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">预算资金</span>
-                <span className="text-yellow-400 font-mono font-bold text-xl">${Math.floor(gameState.resources)}</span>
+                <span className={`${gameState.resources < 50 ? 'text-red-500 animate-pulse' : 'text-yellow-400'} font-mono font-bold text-xl`}>${Math.floor(gameState.resources)}</span>
              </div>
         </div>
 
@@ -76,57 +159,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
         </div>
       </div>
 
-      {/* Entity Inspector (Top Right, below header) */}
-      {gameState.selectedEntity && (
-        <div className="absolute top-28 right-4 w-64 bg-slate-900/95 backdrop-blur-xl border border-slate-500/50 rounded-xl p-4 shadow-2xl z-30 pointer-events-auto transition-all duration-200 animate-fade-in">
-            <div className="flex items-center justify-between border-b border-slate-700 pb-2 mb-3">
-                <h3 className="text-sm font-bold text-white tracking-wider uppercase">个体信息识别</h3>
-                <div className={`w-3 h-3 rounded-full animate-pulse ${gameState.selectedEntity.type === EntityType.ZOMBIE ? 'bg-red-500' : gameState.selectedEntity.type === EntityType.SOLDIER ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-            </div>
-            
-            <div className="space-y-2">
-                <div className="flex justify-between items-end">
-                    <span className="text-2xl font-black text-white">{gameState.selectedEntity.name}</span>
-                    <span className="text-xs text-slate-400 mb-1">{gameState.selectedEntity.gender} / {gameState.selectedEntity.age}岁</span>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-300">
-                        {gameState.selectedEntity.type === EntityType.ZOMBIE ? '已感染 (ZOMBIE)' : gameState.selectedEntity.type === EntityType.SOLDIER ? '特种兵 (SPEC OPS)' : '平民 (CIVILIAN)'}
-                    </span>
-                </div>
-
-                {gameState.selectedEntity.isArmed && getWeaponInfo(gameState.selectedEntity) && (
-                    <div className="bg-slate-800/50 border border-slate-700 p-2 rounded flex items-center justify-between mt-1">
-                        <div className="flex flex-col">
-                             <span className="text-[10px] text-yellow-400 font-bold uppercase">{getWeaponInfo(gameState.selectedEntity).name}</span>
-                             <span className="text-[8px] text-slate-400">{getWeaponInfo(gameState.selectedEntity).description}</span>
-                        </div>
-                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: getWeaponInfo(gameState.selectedEntity).color}}></div>
-                    </div>
-                )}
-
-                {/* Health Bar */}
-                <div className="mt-2">
-                    <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
-                        <span>生命值</span>
-                        <span>{Math.max(0, gameState.selectedEntity.health)}</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-300 ${gameState.selectedEntity.health < 5 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{width: `${Math.min(100, Math.max(0, gameState.selectedEntity.health * 5))}%`}}></div>
-                    </div>
-                </div>
-
-                {/* Thoughts Bubble */}
-                <div className="mt-4 relative bg-slate-800 p-3 rounded-lg rounded-tl-none border border-slate-700">
-                    <div className="absolute -top-2 left-0 w-0 h-0 border-l-[10px] border-l-slate-800 border-t-[10px] border-t-transparent transform rotate-90"></div>
-                    <p className="text-xs italic text-slate-300 leading-relaxed">
-                        "{gameState.selectedEntity.thought}"
-                    </p>
-                </div>
-            </div>
-        </div>
-      )}
+      {/* Entity Inspector */}
+      {renderInspector()}
 
       {/* Middle: Victory/Defeat Modal */}
       {gameState.gameResult && (
@@ -142,7 +176,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                         : "防线崩溃。该区域已沦陷。"}
                 </p>
                 <button 
-                  onClick={onReset}
+                  onClick={() => { audioService.playSound(SoundType.UI_CLICK); onReset(); }}
                   className="bg-white hover:bg-slate-200 text-slate-900 font-black py-4 px-10 rounded-xl transition-all transform hover:scale-105 uppercase tracking-widest shadow-lg"
                 >
                     重新部署
@@ -183,32 +217,45 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                 line1="观察"
                 line2="移动"
                 cost={0} 
+                cooldownEnd={0}
                 isActive={selectedTool === ToolType.NONE} 
-                onClick={() => onSelectTool(ToolType.NONE)} 
+                onClick={() => { audioService.playSound(SoundType.UI_CLICK); onSelectTool(ToolType.NONE); }} 
             />
             <ToolButton 
                 icon="📦" 
                 line1="空投"
                 line2="武器"
                 cost={GAME_CONSTANTS.COST_SUPPLY} 
+                cooldownEnd={gameState.cooldowns[ToolType.SUPPLY_DROP] || 0}
                 isActive={selectedTool === ToolType.SUPPLY_DROP} 
-                onClick={() => onSelectTool(ToolType.SUPPLY_DROP)} 
+                onClick={() => { audioService.playSound(SoundType.UI_CLICK); onSelectTool(ToolType.SUPPLY_DROP); }} 
             />
             <ToolButton 
                 icon="🚁" 
                 line1="特种" 
                 line2="突击队"
                 cost={GAME_CONSTANTS.COST_SPEC_OPS} 
+                cooldownEnd={gameState.cooldowns[ToolType.SPEC_OPS] || 0}
                 isActive={selectedTool === ToolType.SPEC_OPS} 
-                onClick={() => onSelectTool(ToolType.SPEC_OPS)} 
+                onClick={() => { audioService.playSound(SoundType.UI_CLICK); onSelectTool(ToolType.SPEC_OPS); }} 
+            />
+            <ToolButton 
+                icon="💉" 
+                line1="医疗" 
+                line2="小组"
+                cost={GAME_CONSTANTS.COST_MEDIC} 
+                cooldownEnd={gameState.cooldowns[ToolType.MEDIC_TEAM] || 0}
+                isActive={selectedTool === ToolType.MEDIC_TEAM} 
+                onClick={() => { audioService.playSound(SoundType.UI_CLICK); onSelectTool(ToolType.MEDIC_TEAM); }} 
             />
             <ToolButton 
                 icon="✈️" 
                 line1="精确"
                 line2="空袭"
                 cost={GAME_CONSTANTS.COST_AIRSTRIKE} 
+                cooldownEnd={gameState.cooldowns[ToolType.AIRSTRIKE] || 0}
                 isActive={selectedTool === ToolType.AIRSTRIKE} 
-                onClick={() => onSelectTool(ToolType.AIRSTRIKE)} 
+                onClick={() => { audioService.playSound(SoundType.UI_CLICK); onSelectTool(ToolType.AIRSTRIKE); }} 
             />
         </div>
       </div>
@@ -221,48 +268,66 @@ const ToolButton: React.FC<{
     line1: string, 
     line2: string,
     cost: number, 
+    cooldownEnd: number,
     isActive: boolean, 
     onClick: () => void
-}> = ({icon, line1, line2, cost, isActive, onClick}) => (
-    <button 
-        onClick={onClick}
-        className={`
-            group relative flex flex-col items-center justify-center 
-            w-24 h-24 sm:w-32 sm:h-32 rounded-2xl transition-all duration-200 
-            border-2 shadow-xl shrink-0 overflow-hidden
-            ${isActive 
-                ? 'bg-slate-800 border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)] scale-105 z-10' 
-                : 'bg-slate-800/80 border-slate-600 hover:bg-slate-700 hover:border-slate-500 hover:-translate-y-1'
-            }
-        `}
-    >
-        {cost > 0 && (
-            <div className={`
-                absolute top-2 right-2 
-                px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-tight
-                ${isActive ? 'bg-blue-500 text-white' : 'bg-slate-700 text-yellow-400'}
-            `}>
-                ${cost}
+}> = ({icon, line1, line2, cost, cooldownEnd, isActive, onClick}) => {
+    
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((cooldownEnd - now) / 1000));
+    const onCooldown = remaining > 0;
+
+    return (
+        <button 
+            onClick={onClick}
+            disabled={onCooldown}
+            className={`
+                group relative flex flex-col items-center justify-center 
+                w-24 h-24 sm:w-32 sm:h-32 rounded-2xl transition-all duration-200 
+                border-2 shadow-xl shrink-0 overflow-hidden
+                ${isActive 
+                    ? 'bg-slate-800 border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)] scale-105 z-10' 
+                    : 'bg-slate-800/80 border-slate-600 hover:bg-slate-700 hover:border-slate-500 hover:-translate-y-1'
+                }
+                ${onCooldown ? 'opacity-70 cursor-not-allowed' : ''}
+            `}
+        >
+            {/* Cost Badge */}
+            {cost > 0 && !onCooldown && (
+                <div className={`
+                    absolute top-2 right-2 
+                    px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-tight
+                    ${isActive ? 'bg-blue-500 text-white' : 'bg-slate-700 text-yellow-400'}
+                `}>
+                    ${cost}
+                </div>
+            )}
+
+            {/* Cooldown Overlay */}
+            {onCooldown && (
+                <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center z-20 backdrop-blur-[1px]">
+                    <span className="text-2xl font-black text-white font-mono animate-pulse">{remaining}s</span>
+                </div>
+            )}
+
+            <div className="text-3xl sm:text-5xl mb-1 sm:mb-2 filter drop-shadow-lg transform group-hover:scale-110 transition-transform duration-300">
+                {icon}
             </div>
-        )}
+            
+            <div className="flex flex-col items-center leading-none">
+                <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                    {line1}
+                </span>
+                <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase mt-0.5 ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                    {line2}
+                </span>
+            </div>
 
-        <div className="text-3xl sm:text-5xl mb-1 sm:mb-2 filter drop-shadow-lg transform group-hover:scale-110 transition-transform duration-300">
-            {icon}
-        </div>
-        
-        <div className="flex flex-col items-center leading-none">
-            <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase ${isActive ? 'text-white' : 'text-slate-300'}`}>
-                {line1}
-            </span>
-            <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase mt-0.5 ${isActive ? 'text-white' : 'text-slate-300'}`}>
-                {line2}
-            </span>
-        </div>
-
-        {isActive && (
-            <div className="absolute inset-0 rounded-2xl ring-2 ring-blue-400 ring-inset animate-pulse pointer-events-none"></div>
-        )}
-    </button>
-);
+            {isActive && !onCooldown && (
+                <div className="absolute inset-0 rounded-2xl ring-2 ring-blue-400 ring-inset animate-pulse pointer-events-none"></div>
+            )}
+        </button>
+    );
+};
 
 export default UIOverlay;

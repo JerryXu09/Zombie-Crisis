@@ -1,12 +1,12 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import GameMap from './components/GameMap';
 import UIOverlay from './components/UIOverlay';
 import { GameState, RadioMessage, ToolType } from './types';
 import { GAME_CONSTANTS } from './constants';
+import { audioService } from './services/audioService';
 
 const App: React.FC = () => {
-  // gameId acts as a key to force component remounting for a full reset
   const [gameId, setGameId] = useState(0); 
   
   const [gameState, setGameState] = useState<GameState>({
@@ -18,13 +18,27 @@ const App: React.FC = () => {
     gameResult: null,
     resources: GAME_CONSTANTS.INITIAL_RESOURCES,
     selectedEntity: null,
+    cooldowns: {}
   });
 
   const [radioLogs, setRadioLogs] = useState<RadioMessage[]>([]);
   const [selectedTool, setSelectedTool] = useState<ToolType>(ToolType.NONE);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
-  // Optimized state update handler to prevent re-renders from recreating functions
+  useEffect(() => {
+    const initAudio = () => {
+        audioService.init();
+        window.removeEventListener('click', initAudio);
+        window.removeEventListener('keydown', initAudio);
+    };
+    window.addEventListener('click', initAudio);
+    window.addEventListener('keydown', initAudio);
+    return () => {
+        window.removeEventListener('click', initAudio);
+        window.removeEventListener('keydown', initAudio);
+    };
+  }, []);
+
   const handleStateUpdate = useCallback((newState: GameState) => {
     setGameState(prev => ({
         ...prev,
@@ -32,8 +46,9 @@ const App: React.FC = () => {
         infectedCount: newState.infectedCount,
         soldierCount: newState.soldierCount,
         gameResult: newState.gameResult,
-        resources: newState.resources, // Sync resources from simulation
-        selectedEntity: newState.selectedEntity // Sync inspection data from simulation
+        resources: newState.resources,
+        selectedEntity: newState.selectedEntity,
+        cooldowns: newState.cooldowns
     }));
   }, []);
 
@@ -42,7 +57,11 @@ const App: React.FC = () => {
   }, []);
 
   const togglePause = () => {
-    setGameState(prev => ({ ...prev, isPaused: !prev.isPaused }));
+    setGameState(prev => {
+      if (prev.isPaused) audioService.startBGM();
+      else audioService.stopBGM(); 
+      return { ...prev, isPaused: !prev.isPaused };
+    });
   };
 
   const handleResetGame = () => {
@@ -56,16 +75,18 @@ const App: React.FC = () => {
       gameResult: null,
       resources: GAME_CONSTANTS.INITIAL_RESOURCES,
       selectedEntity: null,
+      cooldowns: {}
     });
     setRadioLogs([]);
     setSelectedTool(ToolType.NONE);
     setSelectedEntityId(null);
+    audioService.stopBGM();
   };
 
   return (
     <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
       <GameMap 
-        key={gameId} // Key change forces complete remount and fresh initialization
+        key={gameId} 
         selectedTool={selectedTool}
         isPaused={gameState.isPaused}
         initialState={gameState}
