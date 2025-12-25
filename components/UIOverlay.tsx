@@ -19,9 +19,16 @@ interface UIOverlayProps {
 const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedTool, onSelectTool, onTogglePause, onReset, onLocateEntity, followingEntityId, onToggleFollow }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
-  const [size, setSize] = useState({ width: 384, height: 224 }); // Initial w-96 (384px) h-56 (224px)
+  const [size, setSize] = useState({ width: 384, height: 224 });
   const [resizeDir, setResizeDir] = useState<string | null>(null);
-  const [, setTick] = useState(0); // Force re-render for cooldown timers
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    // Set initial size based on screen width
+    if (window.innerWidth < 1024) {
+        setSize({ width: Math.min(window.innerWidth - 32, 340), height: 160 });
+    }
+  }, []);
 
   const handleScroll = () => {
     if (scrollRef.current) {
@@ -196,28 +203,28 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
     <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden font-sans">
       
       {/* Top Bar: Simulation Stats */}
-      <div className="absolute top-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md p-4 flex flex-col gap-3 pointer-events-auto border-b border-slate-700 shadow-2xl z-20">
-        <div className="flex justify-between items-center">
-             <div className="flex items-center gap-4">
-                <h1 className="text-xl md:text-2xl font-black text-white tracking-widest italic drop-shadow-md">
+      <div className="absolute top-0 left-0 right-0 bg-slate-900/90 backdrop-blur-md p-3 md:p-4 flex flex-col gap-2 md:gap-3 pointer-events-auto border-b border-slate-700 shadow-2xl z-20">
+        <div className="flex justify-between items-center gap-2">
+             <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+                <h1 className="text-lg md:text-2xl font-black text-white tracking-tight md:tracking-widest italic drop-shadow-md whitespace-nowrap">
                 僵尸危机 <span className="text-red-500">行动代号Z</span>
                 </h1>
                 <button 
                     onClick={() => { audioService.playSound(SoundType.UI_CLICK); onTogglePause(); }}
                     className={`
-                        min-w-[120px] h-8 px-4 rounded font-bold text-xs uppercase tracking-wider border transition-all flex items-center justify-center whitespace-nowrap
+                        min-w-[100px] md:min-w-[120px] h-7 md:h-8 px-2 md:px-4 rounded font-bold text-[10px] md:text-xs uppercase tracking-wider border transition-all flex items-center justify-center whitespace-nowrap
                         ${gameState.isPaused 
                             ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500 animate-pulse' 
                             : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
                         }
                     `}
                 >
-                    {gameState.isPaused ? "⏸ 模拟暂停" : "▶ 模拟进行中"}
+                    {gameState.isPaused ? "⏸ 暂停" : "▶ 运行"}
                 </button>
              </div>
-             <div className="flex items-center gap-3 bg-slate-800 px-4 py-1.5 rounded-lg border border-slate-600 shadow-inner">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">预算资金</span>
-                <span className={`${gameState.resources < 50 ? 'text-red-500 animate-pulse' : 'text-yellow-400'} font-mono font-bold text-xl`}>${Math.floor(gameState.resources)}</span>
+             <div className="flex items-center gap-2 md:gap-3 bg-slate-800 px-2 md:px-4 py-1 md:py-1.5 rounded-lg border border-slate-600 shadow-inner shrink-0">
+                <span className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-wider hidden xs:inline">预算资金</span>
+                <span className={`${gameState.resources < 50 ? 'text-red-500 animate-pulse' : 'text-yellow-400'} font-mono font-bold text-base md:text-xl`}>${Math.floor(gameState.resources)}</span>
              </div>
         </div>
 
@@ -263,10 +270,10 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
       )}
 
       {/* Bottom Left: Radio Log */}
-      <div className="absolute bottom-4 left-4 z-20 pointer-events-auto hidden lg:flex">
+      <div className="absolute bottom-28 lg:bottom-4 left-4 z-20 pointer-events-auto flex">
           <div 
             style={{ width: `${size.width}px`, height: `${size.height}px` }}
-            className="bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-4 rounded-xl overflow-hidden flex flex-col shadow-2xl relative group/window"
+            className="bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-3 md:p-4 rounded-xl overflow-hidden flex flex-col shadow-2xl relative group/window"
           >
               {/* Resize Handles */}
               <div 
@@ -324,8 +331,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
       </div>
 
       {/* Bottom Right: Toolbar */}
-      <div className="absolute bottom-4 right-4 left-4 lg:left-auto z-20 pointer-events-auto overflow-x-auto scrollbar-hide">
-        <div className="flex gap-3 justify-center lg:justify-end min-w-max">
+      <div className="absolute bottom-4 right-4 left-4 lg:left-auto z-20 pointer-events-auto overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-3 justify-center lg:justify-end min-w-max px-4 py-2">
             <ToolButton 
                 icon="🖐️" 
                 line1="观察"
@@ -397,8 +404,8 @@ const ToolButton: React.FC<{
             disabled={onCooldown}
             className={`
                 group relative flex flex-col items-center justify-center 
-                w-24 h-24 sm:w-32 sm:h-32 rounded-2xl transition-all duration-200 
-                border-2 shadow-xl shrink-0 overflow-hidden
+                w-16 h-16 xs:w-20 xs:h-20 sm:w-32 sm:h-32 rounded-xl sm:rounded-2xl transition-all duration-200 
+                border shadow-xl shrink-0 overflow-hidden
                 ${isActive 
                     ? 'bg-slate-800 border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.4)] scale-105 z-10' 
                     : 'bg-slate-800/80 border-slate-600 hover:bg-slate-700 hover:border-slate-500 hover:-translate-y-1'
@@ -409,9 +416,9 @@ const ToolButton: React.FC<{
             {/* Cost Badge */}
             {cost > 0 && !onCooldown && (
                 <div className={`
-                    absolute top-2 right-2 
-                    px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-tight
-                    ${isActive ? 'bg-blue-500 text-white' : 'bg-slate-700 text-yellow-400'}
+                    absolute top-1 right-1 sm:top-2 sm:right-2 
+                    px-1 sm:px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] font-mono font-bold tracking-tight z-10
+                    ${isActive ? 'bg-blue-500 text-white' : 'bg-slate-800/90 text-yellow-400 border border-slate-700/50'}
                 `}>
                     ${cost}
                 </div>
@@ -424,15 +431,15 @@ const ToolButton: React.FC<{
                 </div>
             )}
 
-            <div className="text-3xl sm:text-5xl mb-1 sm:mb-2 filter drop-shadow-lg transform group-hover:scale-110 transition-transform duration-300">
+            <div className="text-lg xs:text-xl sm:text-5xl mb-1 sm:mb-2 filter drop-shadow-lg transform group-hover:scale-110 transition-transform duration-300">
                 {icon}
             </div>
             
             <div className="flex flex-col items-center leading-none">
-                <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                <span className={`text-[8px] xs:text-[9px] sm:text-xs font-black tracking-widest uppercase ${isActive ? 'text-white' : 'text-slate-300'}`}>
                     {line1}
                 </span>
-                <span className={`text-[10px] sm:text-xs font-black tracking-widest uppercase mt-0.5 ${isActive ? 'text-white' : 'text-slate-300'}`}>
+                <span className={`text-[8px] xs:text-[9px] sm:text-xs font-black tracking-widest uppercase mt-0.5 ${isActive ? 'text-white' : 'text-slate-300'}`}>
                     {line2}
                 </span>
             </div>
