@@ -90,6 +90,10 @@ export interface GameEntity {
   homeLocationName?: string; // For richer dialogues
   currentLocationName?: string; // For real-time location awareness
   locationMetadata?: any; // Detailed LocationInfo from mapDataService
+  
+  // Mood / Bubbling
+  moodIcon?: string;    // Current active emoji
+  moodTimer?: number;   // Duration left for the bubble (ms)
 }
 
 export interface GameState {

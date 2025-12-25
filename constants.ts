@@ -59,6 +59,20 @@ export const GAME_CONSTANTS = {
   // Mechanics
   NET_DURATION: 30000, // 30s (in ms, convert to ticks in logic)
   HEAL_DURATION: 5000, // 5s
+
+  // Bubbling / Mood
+  MOOD_CHANCE: 0.005, // Chance per tick to show a new mood
+  MOOD_DURATION: 4000, // Duration of the bubble in ms
+};
+
+export const MOOD_ICONS = {
+  CIVILIAN_CALM: ["😊", "🤔", "☕", "📱", "🏠", "🎶", "🚶"],
+  CIVILIAN_PANIC: ["😱", "🏃", "🆘", "😨", "💔", "🩹", "🔥"],
+  CIVILIAN_ARMED: ["🔫", "😤", "🎯", "🛡️", "🔥", "💢"],
+  SOLDIER: ["🫡", "🪖", "🔫", "📡", "🎯", "🛡️"],
+  MEDIC: ["💉", "🏥", "🩹", "🩺", "🚑", "🧪"],
+  ZOMBIE: ["🧟", "🧠", "🥩", "🩸", "💀", "🤤", "🥩"],
+  ZOMBIE_TRAPPED: ["⛓️", "💢", "😡", "🧊", "⛓️"],
 };
 
 export const WEAPON_STATS = {

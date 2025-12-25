@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import { Coordinates, EntityType, CivilianType, GameEntity, GameState, RadioMessage, ToolType, Vector, WeaponType, VisualEffect, SoundType } from '../types';
-import { GAME_CONSTANTS, DEFAULT_LOCATION, CHINESE_SURNAMES, CHINESE_GIVEN_NAMES_MALE, CHINESE_GIVEN_NAMES_FEMALE, THOUGHTS, WEAPON_STATS, WEAPON_SYMBOLS } from '../constants';
+import { GAME_CONSTANTS, DEFAULT_LOCATION, CHINESE_SURNAMES, CHINESE_GIVEN_NAMES_MALE, CHINESE_GIVEN_NAMES_FEMALE, THOUGHTS, WEAPON_STATS, WEAPON_SYMBOLS, MOOD_ICONS } from '../constants';
 import { generateRadioChatter } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { mapDataService } from '../services/mapDataService';
@@ -142,6 +142,23 @@ const getRandomThought = (entity: GameEntity, neighbors: GameEntity[], nearbyZom
     return pool[Math.floor(Math.random() * pool.length)];
 };
 
+const getRandomMood = (entity: GameEntity, nearbyZombiesCount: number) => {
+    if (entity.isDead) return undefined;
+    if (entity.isTrapped) return MOOD_ICONS.ZOMBIE_TRAPPED[Math.floor(Math.random() * MOOD_ICONS.ZOMBIE_TRAPPED.length)];
+    if (entity.isMedic) return MOOD_ICONS.MEDIC[Math.floor(Math.random() * MOOD_ICONS.MEDIC.length)];
+    
+    if (entity.type === EntityType.ZOMBIE) {
+        return MOOD_ICONS.ZOMBIE[Math.floor(Math.random() * MOOD_ICONS.ZOMBIE.length)];
+    } else if (entity.type === EntityType.SOLDIER) {
+        return MOOD_ICONS.SOLDIER[Math.floor(Math.random() * MOOD_ICONS.SOLDIER.length)];
+    } else {
+        // Civilian
+        if (entity.isArmed) return MOOD_ICONS.CIVILIAN_ARMED[Math.floor(Math.random() * MOOD_ICONS.CIVILIAN_ARMED.length)];
+        if (nearbyZombiesCount > 0) return MOOD_ICONS.CIVILIAN_PANIC[Math.floor(Math.random() * MOOD_ICONS.CIVILIAN_PANIC.length)];
+        return MOOD_ICONS.CIVILIAN_CALM[Math.floor(Math.random() * MOOD_ICONS.CIVILIAN_CALM.length)];
+    }
+};
+
 const createEntityIcon = (entity: GameEntity, isSelected: boolean) => {
   // Corpse Styling
   if (entity.isDead) {
@@ -204,9 +221,27 @@ const createEntityIcon = (entity: GameEntity, isSelected: boolean) => {
      ringClass += ' ring-2 ring-purple-500 animate-pulse';
   }
 
+  // Mood Bubble Rendering
+  let moodBubble = '';
+  if (entity.moodIcon && entity.moodTimer && entity.moodTimer > 0) {
+      moodBubble = `
+        <div class="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center animate-bounce-subtle z-50">
+            <div class="bg-white rounded-full p-1 shadow-lg border border-slate-200 flex items-center justify-center w-6 h-6 text-sm">
+                ${entity.moodIcon}
+            </div>
+            <div class="w-1.5 h-1.5 bg-white border-r border-b border-slate-200 transform rotate-45 -mt-1 shadow-sm"></div>
+        </div>
+      `;
+  }
+
   return L.divIcon({
     className: 'bg-transparent',
-    html: `<div class="${colorClass} ${shapeClass} ${size} ${effectClass} ${ringClass} transition-all duration-300 relative overflow-hidden">${innerContent}</div>`,
+    html: `
+        <div class="relative">
+            ${moodBubble}
+            <div class="${colorClass} ${shapeClass} ${size} ${effectClass} ${ringClass} transition-all duration-300 relative overflow-hidden">${innerContent}</div>
+        </div>
+    `,
     iconSize: isSelected ? [20, 20] : [12, 12],
     iconAnchor: isSelected ? [10, 10] : [6, 6],
   });
@@ -235,16 +270,27 @@ const EntityMarker = React.memo(({ entity, lat, lng, isSelected, onSelect }: {
 
   const icon = useMemo(() => 
     createEntityIcon(entity, isSelected), 
-    [entity.type, entity.subType, entity.isArmed, entity.isInfected, entity.isDead, entity.isTrapped, entity.isMedic, entity.weaponType, entity.infectionRiskTimer, isSelected]
+    [entity.type, entity.subType, entity.isArmed, entity.isInfected, entity.isDead, entity.isTrapped, entity.isMedic, entity.weaponType, entity.infectionRiskTimer, entity.moodIcon, entity.moodTimer, isSelected]
   );
 
   return (
-    <Marker 
-      position={[lat, lng]} 
-      icon={icon}
-      eventHandlers={eventHandlers}
-      zIndexOffset={entity.isDead ? -100 : 0} 
-    />
+    <>
+      <style>{`
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translate(-50%, 0); }
+          50% { transform: translate(-50%, -4px); }
+        }
+        .animate-bounce-subtle {
+          animation: bounce-subtle 2s ease-in-out infinite;
+        }
+      `}</style>
+      <Marker 
+        position={[lat, lng]} 
+        icon={icon}
+        eventHandlers={eventHandlers}
+        zIndexOffset={entity.isDead ? -100 : 0} 
+      />
+    </>
   );
 });
 
@@ -679,6 +725,17 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
 
           if (Math.random() < 0.02) { 
             entity.thought = getRandomThought(entity, activeEntities, nearbyThreats);
+          }
+
+          // Mood Logic
+          if (entity.moodTimer && entity.moodTimer > 0) {
+              entity.moodTimer -= GAME_CONSTANTS.TICK_RATE;
+              if (entity.moodTimer <= 0) {
+                  entity.moodIcon = undefined;
+              }
+          } else if (Math.random() < GAME_CONSTANTS.MOOD_CHANCE) {
+              entity.moodIcon = getRandomMood(entity, nearbyThreats);
+              entity.moodTimer = GAME_CONSTANTS.MOOD_DURATION;
           }
 
           entity.velocity = addVec(entity.velocity, acceleration);
