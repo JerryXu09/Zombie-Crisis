@@ -1,4 +1,4 @@
-import { Coordinates } from '../types';
+import { Coordinates, Building } from '../types';
 
 interface CacheEntry {
   name: string;
@@ -109,6 +109,33 @@ export const mapDataService = {
       return Array.from(new Set(names)) as string[];
     } catch (error) {
       console.error('Overpass Error:', error);
+      return [];
+    }
+  },
+
+  async getBuildingGeometries(coords: Coordinates): Promise<Building[]> {
+    try {
+      await throttleRequest();
+      // Fetch buildings within 400m (reduced from 600m to avoid timeouts)
+      const url = `https://overpass-api.de/api/interpreter?data=[out:json];(way(around:400,${coords.lat},${coords.lng})[building];);out geom;`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Overpass Network response was not ok: ${response.status}`);
+      
+      const data = await response.json();
+      const buildings: Building[] = data.elements
+        .filter((e: any) => e.type === 'way' && e.geometry)
+        .map((e: any) => ({
+          id: `building-${e.id}`,
+          geometry: e.geometry.map((pt: any) => ({ lat: pt.lat, lng: pt.lon })),
+          tags: e.tags || {},
+          name: e.tags?.name || e.tags?.['name:zh'] || e.tags?.['name:en'] || '普通建筑',
+          type: e.tags?.building || 'building'
+        }));
+        
+      return buildings;
+    } catch (error) {
+      console.error('getBuildingGeometries Error:', error);
       return [];
     }
   }

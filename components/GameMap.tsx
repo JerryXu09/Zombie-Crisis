@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, Circle, Polygon } from 'react-leaflet';
 import L from 'leaflet';
-import { Coordinates, EntityType, CivilianType, GameEntity, GameState, RadioMessage, ToolType, Vector, WeaponType, VisualEffect, SoundType } from '../types';
+import { Coordinates, EntityType, CivilianType, GameEntity, GameState, RadioMessage, ToolType, Vector, WeaponType, VisualEffect, SoundType, Building } from '../types';
 import { GAME_CONSTANTS, DEFAULT_LOCATION, CHINESE_SURNAMES, CHINESE_GIVEN_NAMES_MALE, CHINESE_GIVEN_NAMES_FEMALE, THOUGHTS, WEAPON_STATS, WEAPON_SYMBOLS, MOOD_ICONS } from '../constants';
 import { generateRadioChatter } from '../services/geminiService';
 import { audioService } from '../services/audioService';
@@ -29,6 +29,19 @@ const limitVec = (v: Vector, max: number): Vector => {
     return multVec(n, max);
   }
   return v;
+};
+
+// --- Geometry Helpers ---
+const isPointInPolygon = (point: Coordinates, polygon: Coordinates[]) => {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lat, yi = polygon[i].lng;
+    const xj = polygon[j].lat, yj = polygon[j].lng;
+    const intersect = ((yi > point.lng) !== (yj > point.lng))
+        && (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 };
 
 // --- Helpers ---
@@ -302,11 +315,13 @@ interface GameMapProps {
   initialState: GameState;
   selectedEntityId: string | null;
   onEntitySelect: (id: string | null) => void;
+  selectedBuildingId: string | null;
+  onBuildingSelect: (id: string | null) => void;
   followingEntityId: string | null;
   onCancelFollow: () => void;
 }
 
-const MapEvents: React.FC<{ onMapClick: (latlng: L.LatLng) => void, onDrag: () => void }> = ({ onMapClick, onDrag }) => {
+const MapEvents: React.FC<{ onMapClick: (latlng: L.LatLng) => void, onDrag: () => void, onMoveEnd: (center: Coordinates) => void }> = ({ onMapClick, onDrag, onMoveEnd }) => {
   useMapEvents({
     click(e) { onMapClick(e.latlng); },
     dragstart() { onDrag(); },
@@ -314,6 +329,10 @@ const MapEvents: React.FC<{ onMapClick: (latlng: L.LatLng) => void, onDrag: () =
         if (e.hard) return; // ignore programatic
         const originalEvent = (e as any).originalEvent;
         if (originalEvent) onDrag(); // only if user triggered
+    },
+    moveend(e) {
+      const center = e.target.getCenter();
+      onMoveEnd({ lat: center.lat, lng: center.lng });
     }
   });
   return null;
@@ -354,7 +373,7 @@ const LocateController: React.FC<{ followingEntityId: string | null, entities: G
   return null;
 };
 
-const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, followingEntityId, onCancelFollow }) => {
+const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, selectedBuildingId, onBuildingSelect, followingEntityId, onCancelFollow }) => {
   const [centerPos, setCenterPos] = useState<Coordinates>(DEFAULT_LOCATION);
   const [entities, setEntities] = useState<GameEntity[]>([]);
   const [effects, setEffects] = useState<VisualEffect[]>([]); 
@@ -364,15 +383,18 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
   const stateRef = useRef<GameState>(initialState);
   const pausedRef = useRef(isPaused);
   const selectedIdRef = useRef(selectedEntityId);
+  const selectedBuildingIdRef = useRef(selectedBuildingId);
   const discoveryRef = useRef(false);
   const victoryAnnouncedRef = useRef(false);
   const lowHealthAnnouncedRef = useRef(false);
   const logCounterRef = useRef(0);
   const tickRef = useRef(0);
+  const buildingsRef = useRef<Building[]>([]);
   const getUniqueId = () => `${Date.now()}-${logCounterRef.current++}`;
 
   useEffect(() => { pausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { selectedIdRef.current = selectedEntityId; }, [selectedEntityId]);
+  useEffect(() => { selectedBuildingIdRef.current = selectedBuildingId; }, [selectedBuildingId]);
 
   const lastLogsRef = useRef<Record<string, { text: string, time: number }>>({});
 
@@ -394,6 +416,23 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
         timestamp: now
     });
   }, [onAddLog]);
+
+  const fetchBuildings = useCallback((pos: Coordinates) => {
+    mapDataService.getBuildingGeometries(pos).then(geoms => {
+        // Merge and deduplicate
+        const existingIds = new Set(buildingsRef.current.map(b => b.id));
+        const newBuildings = geoms.filter(b => !existingIds.has(b.id));
+        if (newBuildings.length > 0) {
+            buildingsRef.current = [...buildingsRef.current, ...newBuildings];
+            // Trigger re-render by updating entities or a dummy state if needed,
+            // but since buildings are rendered from ref in the return, 
+            // we might need a state to trigger React to refresh the Polygon list.
+            setBuildingsSyncTrigger(prev => prev + 1);
+        }
+    });
+  }, []);
+
+  const [buildingsSyncTrigger, setBuildingsSyncTrigger] = useState(0);
   
   useEffect(() => {
       if (initialized && !isPaused) {
@@ -409,6 +448,10 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
         setCenterPos(startPos);
         initPopulation(startPos);
         setInitialized(true);
+
+        // Fetch initial buildings
+        fetchBuildings(startPos);
+
         mapDataService.getLocationInfo(startPos).then(info => {
           generateRadioChatter(stateRef.current, startPos, 'START', info || undefined).then(text => {
             addLog({ sender: '指挥部', text });
@@ -561,6 +604,27 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
 
           let acceleration: Vector = { x: 0, y: 0 };
           let maxSpeed = GAME_CONSTANTS.MAX_SPEED_CIVILIAN;
+          
+          // Collision & Physics Logic
+          const isInside = buildingsRef.current.some(b => isPointInPolygon(entity.position, b.geometry));
+          let penalty = 1.0;
+          if (isInside) {
+              if (entity.type === EntityType.SOLDIER || entity.isMedic) penalty = GAME_CONSTANTS.PENALTY_PROFESSIONAL;
+              else if (entity.type === EntityType.ZOMBIE) penalty = GAME_CONSTANTS.PENALTY_ZOMBIE;
+              else penalty = GAME_CONSTANTS.PENALTY_CIVILIAN;
+          }
+
+          // Boundary Transition Logic
+          if (isInside !== entity.wasInsideBuilding) {
+              // Only trigger for active entities to avoid dead people "crossing"
+              if (Math.random() < 0.4) {
+                  entity.moodIcon = MOOD_ICONS.CROSSING[Math.floor(Math.random() * MOOD_ICONS.CROSSING.length)];
+                  entity.moodTimer = GAME_CONSTANTS.MOOD_DURATION;
+                  entity.thought = THOUGHTS.CROSSING[Math.floor(Math.random() * THOUGHTS.CROSSING.length)];
+              }
+              entity.wasInsideBuilding = isInside;
+          }
+
           let nearbyThreats = 0;
 
           acceleration = addVec(acceleration, getSeparationForce(entity, activeEntities));
@@ -739,7 +803,7 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
           }
 
           entity.velocity = addVec(entity.velocity, acceleration);
-          entity.velocity = limitVec(entity.velocity, maxSpeed);
+          entity.velocity = limitVec(entity.velocity, maxSpeed * penalty);
           entity.position.lat += entity.velocity.x;
           entity.position.lng += entity.velocity.y;
         });
@@ -1096,6 +1160,10 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
       stateRef.current.selectedEntity = selectedIdRef.current 
           ? currentEntities.find(e => e.id === selectedIdRef.current) || null
           : null;
+          
+      stateRef.current.selectedBuilding = selectedBuildingIdRef.current 
+          ? buildingsRef.current.find(b => b.id === selectedBuildingIdRef.current) || null
+          : null;
 
       if (stateRef.current.infectedCount === 0 && stateRef.current.healthyCount > 0 && !victoryAnnouncedRef.current) {
           stateRef.current.gameResult = 'VICTORY';
@@ -1130,8 +1198,9 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
   // --- PLAYER INPUT ---
   const handleMapClick = (latlng: L.LatLng) => {
     if (stateRef.current.gameResult || pausedRef.current) return;
-
+    
     onEntitySelect(null);
+    onBuildingSelect(null);
 
     const clickPos = { lat: latlng.lat, lng: latlng.lng };
     
@@ -1304,7 +1373,32 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, isPaused, onUpdateState
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         className="map-tiles"
       />
-      <MapEvents onMapClick={handleMapClick} onDrag={onCancelFollow} />
+      <MapEvents onMapClick={handleMapClick} onDrag={onCancelFollow} onMoveEnd={fetchBuildings} />
+      
+      {/* Buildings Layer */}
+      {buildingsRef.current.map(b => (
+        <Polygon
+          key={b.id}
+          positions={b.geometry.map(p => [p.lat, p.lng] as [number, number])}
+          pathOptions={{
+            color: b.id === selectedBuildingId ? '#FACC15' : '#94A3B8',
+            weight: b.id === selectedBuildingId ? 3 : 1,
+            fillColor: b.id === selectedBuildingId ? '#FACC15' : '#475569',
+            fillOpacity: b.id === selectedBuildingId ? 0.4 : 0.2,
+            className: 'building-polygon'
+          }}
+          eventHandlers={{
+            click: (e) => {
+              L.DomEvent.stopPropagation(e);
+              if (selectedTool === ToolType.NONE) {
+                onBuildingSelect(b.id === selectedBuildingId ? null : b.id);
+                audioService.playSound(SoundType.UI_SELECT);
+              }
+            }
+          }}
+        />
+      ))}
+
       <LocateController followingEntityId={followingEntityId} entities={entities} onCancelFollow={onCancelFollow} />
       
       {effects.map(ef => {

@@ -1,4 +1,12 @@
 
+export interface Building {
+  id: string;
+  geometry: Coordinates[];
+  tags: Record<string, string>;
+  name: string;
+  type: string;
+}
+
 export enum EntityType {
   CIVILIAN = 'CIVILIAN',
   ZOMBIE = 'ZOMBIE',
@@ -94,6 +102,7 @@ export interface GameEntity {
   // Mood / Bubbling
   moodIcon?: string;    // Current active emoji
   moodTimer?: number;   // Duration left for the bubble (ms)
+  wasInsideBuilding?: boolean; // For boundary transition detection
 }
 
 export interface GameState {
@@ -105,6 +114,7 @@ export interface GameState {
   gameResult: 'VICTORY' | 'DEFEAT' | null;
   resources: number; 
   selectedEntity: GameEntity | null; 
+  selectedBuilding: Building | null; 
   
   // Cooldowns (Timestamp when available)
   cooldowns: {

@@ -1,6 +1,6 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import { GameState, RadioMessage, ToolType, EntityType, WeaponType, SoundType } from '../types';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { GameState, RadioMessage, ToolType, EntityType, WeaponType, SoundType, Building } from '../types';
 import { GAME_CONSTANTS, WEAPON_STATS } from '../constants';
 import { audioService } from '../services/audioService';
 
@@ -108,6 +108,119 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
       if (!entity.isArmed) return null;
       const wType = entity.weaponType || WeaponType.PISTOL;
       return WEAPON_STATS[wType];
+  };
+
+  const getTacticalAnalysis = (building: Building) => {
+      const type = building.type.toLowerCase();
+      if (type.includes('apartments') || type.includes('residential') || type.includes('house')) {
+          return {
+              title: "生活居住区",
+              description: "由于分区密集，容易在室内发生近距离遭遇战。窗户较多，便于观察街道情报。",
+              pros: ["掩体丰富", "物资分散"],
+              cons: ["出口狭窄", "隔离度差"],
+              safety: "MEDIUM"
+          };
+      }
+      if (type.includes('office') || type.includes('commercial') || type.includes('retail') || type.includes('mall')) {
+          return {
+              title: "商业办公区",
+              description: "通常拥有开阔的大厅和复杂的通风系统。虽然视野好，但大面积的玻璃幕墙无法抵御炸弹冲击。",
+              pros: ["视野开阔", "转运空间大"],
+              cons: ["防御薄弱", "照明依赖电力"],
+              safety: "LOW"
+          };
+      }
+      if (type.includes('hospital') || type.includes('university') || type.includes('school')) {
+          return {
+              title: "关键民生设施",
+              description: "战术价值高。可能存有医疗物资或收容大量幸存者。内部走廊长而笔直，适合火力覆盖。",
+              pros: ["高价值目标", "结构稳固"],
+              cons: ["僵尸富集区", "地形复杂"],
+              safety: "HIGH"
+          };
+      }
+      if (type.includes('industrial') || type.includes('factory') || type.includes('warehouse')) {
+          return {
+              title: "工业仓储区",
+              description: "坚固的钢制建筑结构。非常适合作为临时避难所或武器库，但内部回声会导致枪声吸引更多感染者。",
+              pros: ["绝对掩护", "高度私密"],
+              cons: ["回声较大", "外部死角多"],
+              safety: "VERY HIGH"
+          };
+      }
+      return {
+          title: "一般城市建筑",
+          description: "标准城市结构。在战术地图上并无特殊标注，可作为常规掩体使用。",
+          pros: ["通用掩护"],
+          cons: ["无特殊优势"],
+          safety: "LOW"
+      };
+  };
+
+  const renderBuildingInspector = () => {
+    if (!gameState.selectedBuilding) return null;
+    const b = gameState.selectedBuilding;
+    const analysis = getTacticalAnalysis(b);
+
+    return (
+      <div className="absolute top-28 right-4 w-72 bg-slate-900/95 backdrop-blur-xl border border-yellow-500/30 rounded-xl p-4 shadow-[0_0_30px_rgba(234,179,8,0.15)] z-30 pointer-events-auto transition-all duration-300 animate-fade-in border-t-yellow-500/60 border-t-2">
+          <div className="flex items-center justify-between border-b border-slate-700/50 pb-2 mb-4">
+              <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                  <h3 className="text-[10px] font-black text-yellow-500 tracking-[0.2em] uppercase">建筑战术识别</h3>
+              </div>
+              <span className="text-[9px] font-mono text-slate-500">ID: {b.id.split('-')[1]}</span>
+          </div>
+
+          <div className="space-y-4">
+              <div>
+                  <h4 className="text-xl font-black text-white leading-tight">{b.name}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">{b.type.toUpperCase()}</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        analysis.safety === 'VERY HIGH' ? 'text-emerald-400 bg-emerald-400/10' :
+                        analysis.safety === 'HIGH' ? 'text-blue-400 bg-blue-400/10' :
+                        analysis.safety === 'MEDIUM' ? 'text-yellow-400 bg-yellow-400/10' :
+                        'text-red-400 bg-red-400/10'
+                      }`}>
+                          安全性预估: {analysis.safety}
+                      </span>
+                  </div>
+              </div>
+
+              <div className="bg-slate-800/40 p-3 rounded-lg border border-slate-700/50 space-y-2">
+                  <h5 className="text-[10px] font-bold text-yellow-500/80 uppercase tracking-wider">{analysis.title}</h5>
+                  <p className="text-xs text-slate-400 leading-relaxed italic">
+                      "{analysis.description}"
+                  </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                      <div className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">战术优势 (Pros)</div>
+                      <div className="space-y-1">
+                          {analysis.pros.map((p, i) => (
+                              <div key={i} className="text-[10px] text-slate-300 flex items-center gap-1.5 line-clamp-1">
+                                  <span className="w-1 h-1 bg-emerald-500 rounded-full"></span> {p}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="space-y-1.5">
+                      <div className="text-[9px] font-bold text-red-400 uppercase tracking-tighter">战术缺陷 (Cons)</div>
+                      <div className="space-y-1">
+                          {analysis.cons.map((c, i) => (
+                              <div key={i} className="text-[10px] text-slate-300 flex items-center gap-1.5 line-clamp-1">
+                                  <span className="w-1 h-1 bg-red-400 rounded-full"></span> {c}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+
+              </div>
+          </div>
+      );
   };
 
   const renderInspector = () => {
@@ -245,6 +358,9 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
 
       {/* Entity Inspector */}
       {renderInspector()}
+      
+      {/* Building Inspector */}
+      {renderBuildingInspector()}
 
       {/* Middle: Victory/Defeat Modal */}
       {gameState.gameResult && (

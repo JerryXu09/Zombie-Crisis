@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import GameMap from './components/GameMap';
 import UIOverlay from './components/UIOverlay';
-import { GameState, RadioMessage, ToolType } from './types';
+import { GameState, RadioMessage, ToolType, Building } from './types';
 import { GAME_CONSTANTS } from './constants';
 import { audioService } from './services/audioService';
 
@@ -18,12 +18,14 @@ const App: React.FC = () => {
     gameResult: null,
     resources: GAME_CONSTANTS.INITIAL_RESOURCES,
     selectedEntity: null,
+    selectedBuilding: null,
     cooldowns: {}
   });
 
   const [radioLogs, setRadioLogs] = useState<RadioMessage[]>([]);
   const [selectedTool, setSelectedTool] = useState<ToolType>(ToolType.NONE);
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [followingEntityId, setFollowingEntityId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,6 +51,7 @@ const App: React.FC = () => {
         gameResult: newState.gameResult,
         resources: newState.resources,
         selectedEntity: newState.selectedEntity,
+        selectedBuilding: newState.selectedBuilding,
         cooldowns: newState.cooldowns
     }));
   }, []);
@@ -83,11 +86,13 @@ const App: React.FC = () => {
       gameResult: null,
       resources: GAME_CONSTANTS.INITIAL_RESOURCES,
       selectedEntity: null,
+      selectedBuilding: null,
       cooldowns: {}
     });
     setRadioLogs([]);
     setSelectedTool(ToolType.NONE);
     setSelectedEntityId(null);
+    setSelectedBuildingId(null);
     audioService.stopBGM();
   };
 
@@ -101,7 +106,15 @@ const App: React.FC = () => {
         onUpdateState={handleStateUpdate}
         onAddLog={handleAddLog}
         selectedEntityId={selectedEntityId}
-        onEntitySelect={setSelectedEntityId}
+        onEntitySelect={(id) => {
+            setSelectedEntityId(id);
+            if (id) setSelectedBuildingId(null);
+        }}
+        selectedBuildingId={selectedBuildingId}
+        onBuildingSelect={(id) => {
+            setSelectedBuildingId(id);
+            if (id) setSelectedEntityId(null);
+        }}
         followingEntityId={followingEntityId}
         onCancelFollow={() => setFollowingEntityId(null)}
       />

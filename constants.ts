@@ -14,6 +14,11 @@ export const GAME_CONSTANTS = {
   MULT_SPRINT: 1.2, 
   MULT_WANDER: 0.6, 
 
+  // Speed Penalties (When inside buildings)
+  PENALTY_CIVILIAN: 0.5,    // 50% reduction
+  PENALTY_ZOMBIE: 0.2,      // 80% reduction (Zombies are slower indoors)
+  PENALTY_PROFESSIONAL: 0.9, // 10% reduction (Hardly affected)
+
   // Ranges (degrees)
   INFECTION_RANGE: 0.00022, // Increased range to make infection easier
   VISION_RANGE_ZOMBIE: 0.0030, // Increased vision  
@@ -73,6 +78,7 @@ export const MOOD_ICONS = {
   MEDIC: ["💉", "🏥", "🩹", "🩺", "🚑", "🧪"],
   ZOMBIE: ["🧟", "🧠", "🥩", "🩸", "💀", "🤤", "🥩"],
   ZOMBIE_TRAPPED: ["⛓️", "💢", "😡", "🧊", "⛓️"],
+  CROSSING: ["🚪", "🧱", "🏢", "🏠", "🏃‍♂️", "💨"],
 };
 
 export const WEAPON_STATS = {
@@ -194,6 +200,11 @@ export const THOUGHTS = {
   ARMED_CIVILIAN: [
     "我也能战斗了！指挥部听到吗？", "发现一个活死人，正在瞄准！", "为了我的家人，我不会退缩！", 
     "这玩意后坐力真大，但我能行！", "有谁在频道里吗？我这边发现僵尸了！"
+  ],
+  CROSSING: [
+    "这儿地势不错，适合防守。", "这些断壁残垣...以前一定是座漂亮的建筑。", "嘿，小心头顶！", 
+    "这里面可能有物资。", "这个房间还没查过...", "感觉这些缝隙间不安全。",
+    "特种作战守则第一条：进入室内先清理死角。", "平民注意，紧跟专业人员，不要掉队！"
   ],
   CORPSE: [
     "...", "（已死亡）", "...", "..."
