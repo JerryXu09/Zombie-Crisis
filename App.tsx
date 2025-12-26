@@ -1,6 +1,6 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
-import GameMap from './components/GameMap';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import GameMap, { GameMapRef } from './components/GameMap';
 import UIOverlay from './components/UIOverlay';
 import { GameState, RadioMessage, ToolType, Building } from './types';
 import { GAME_CONSTANTS } from './constants';
@@ -8,6 +8,7 @@ import { audioService } from './services/audioService';
 
 const App: React.FC = () => {
   const [gameId, setGameId] = useState(0); 
+  const gameMapRef = useRef<GameMapRef>(null);
   
   const [gameState, setGameState] = useState<GameState>({
     isPlaying: true,
@@ -100,6 +101,7 @@ const App: React.FC = () => {
     <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
       <GameMap 
         key={gameId} 
+        ref={gameMapRef}
         selectedTool={selectedTool}
         onSelectTool={setSelectedTool}
         isPaused={gameState.isPaused}
@@ -134,6 +136,9 @@ const App: React.FC = () => {
         followingEntityId={followingEntityId}
         onToggleFollow={(id) => {
             setFollowingEntityId(prev => prev === id ? null : id);
+        }}
+        onAnalyzeBuilding={(id) => {
+            gameMapRef.current?.analyzeBuilding(id);
         }}
       />
     </div>

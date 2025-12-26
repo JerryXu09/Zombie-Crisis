@@ -1,10 +1,10 @@
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, Polyline, Circle, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import { Coordinates, EntityType, CivilianType, GameEntity, GameState, RadioMessage, ToolType, Vector, WeaponType, VisualEffect, SoundType, Building, BGMState } from '../types';
 import { GAME_CONSTANTS, DEFAULT_LOCATION, CHINESE_SURNAMES, CHINESE_GIVEN_NAMES_MALE, CHINESE_GIVEN_NAMES_FEMALE, THOUGHTS, WEAPON_STATS, WEAPON_SYMBOLS, MOOD_ICONS } from '../constants';
-import { generateRadioChatter } from '../services/geminiService';
+import { generateRadioChatter, generateTacticalAnalysis } from '../services/geminiService';
 import { audioService } from '../services/audioService';
 import { mapDataService } from '../services/mapDataService';
 
@@ -307,6 +307,10 @@ const EntityMarker = React.memo(({ entity, lat, lng, isSelected, onSelect }: {
   );
 });
 
+export interface GameMapRef {
+  analyzeBuilding: (id: string) => void;
+}
+
 interface GameMapProps {
   selectedTool: ToolType;
   onSelectTool: (tool: ToolType) => void;
@@ -374,7 +378,8 @@ const LocateController: React.FC<{ followingEntityId: string | null, entities: G
   return null;
 };
 
-const GameMap: React.FC<GameMapProps> = ({ selectedTool, onSelectTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, selectedBuildingId, onBuildingSelect, followingEntityId, onCancelFollow }) => {
+const GameMap = forwardRef<GameMapRef, GameMapProps>((props, ref) => {
+  const { selectedTool, onSelectTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, selectedBuildingId, onBuildingSelect, followingEntityId, onCancelFollow } = props;
   const [centerPos, setCenterPos] = useState<Coordinates>(DEFAULT_LOCATION);
   const [entities, setEntities] = useState<GameEntity[]>([]);
   const [effects, setEffects] = useState<VisualEffect[]>([]); 
@@ -418,6 +423,140 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, onSelectTool, isPaused,
         timestamp: now
     });
   }, [onAddLog]);
+
+  const getAnalysisForBuilding = (b: Building) => {
+    const pos = b.geometry[0]; // Use first point as reference
+    const radius = 0.003; // Radius for tactical analysis
+    
+    const nearbyEntities = entitiesRef.current.filter(e => !e.isDead && getVecDistance(e.position, pos) < radius);
+    const zombies = nearbyEntities.filter(e => e.type === EntityType.ZOMBIE).length;
+    const soldiers = nearbyEntities.filter(e => e.type === EntityType.SOLDIER).length;
+    const civilians = nearbyEntities.filter(e => e.type === EntityType.CIVILIAN).length;
+
+    // Survival Guide (Building & Surroundings)
+    let guide = "";
+    const type = b.type.toLowerCase();
+    const isCommercial = type.includes('office') || type.includes('commercial') || type.includes('retail') || type.includes('mall');
+    const isResidential = type.includes('apartments') || type.includes('residential') || type.includes('house');
+    const isIndustrial = type.includes('industrial') || type.includes('factory') || type.includes('warehouse');
+    const isPublic = type.includes('hospital') || type.includes('university') || type.includes('school');
+
+    if (isResidential) {
+        guide = "该建筑属于生活居住区。周边街道错综复杂，适合打游击战。建议检查楼顶是否有撤离通道。交通情况：巷道狭窄，大型车辆难以进入。";
+    } else if (isCommercial) {
+        guide = "商业办公区。玻璃幕墙较多，防御性较弱，但视野极佳。周边通常为开阔地带，容易遭到包围。交通情况：主干道环绕，撤离速度快，但容易堵塞。";
+    } else if (isIndustrial) {
+        guide = "工业仓储区。结构极其稳固，适合长期固守。内部有大量大型设备可作为掩体。交通情况：多货运通道，适合重型装备部署。";
+    } else if (isPublic) {
+        guide = "关键公共设施。内部空间巨大且复杂，医疗物资丰富。战术价值极高。交通情况：设有紧急调度通道，是理想的直升机降落点。";
+    } else {
+        guide = "标准城市建筑。结构通用，无特殊防御加成。周边环境复杂。交通情况：随处可见的街区通道，机动性适中。";
+    }
+
+    // Tactical Analysis (Current real-time data)
+    let tactical = "";
+    if (zombies > 10) {
+        tactical = `警告：当前区域僵尸数量极其密集（${zombies}个）。建筑已被包围，建议立即请求空袭支援或特种突击队进行斩首行动。`;
+    } else if (zombies > 0) {
+        tactical = `注意：周边侦测到${zombies}个感染者。目前压力适中，平民在专业人员掩护下可尝试向外围移动。`;
+    } else {
+        tactical = "当前建筑周边暂时安全。无感染者活动。建议抓紧时间加固防线或搜集物资。";
+    }
+
+    if (soldiers > 0) {
+        tactical += ` 目前该区域有${soldiers}名专业作战人员提供火力覆盖。`;
+    }
+    if (civilians > 0) {
+        tactical += ` 建筑内及周边发现${civilians}名平民。`;
+    }
+
+    return {
+        survivalGuide: guide,
+        tacticalReport: tactical,
+        timestamp: Date.now(),
+        nearbyStats: { zombies, soldiers, civilians }
+    };
+  };
+
+  useImperativeHandle(ref, () => ({
+    analyzeBuilding: async (id: string) => {
+        const b = buildingsRef.current.find(b => b.id === id);
+        if (!b) return;
+
+        // Set scanning state
+        if (!b.analysis) {
+            b.analysis = {
+                survivalGuide: '',
+                tacticalReport: '',
+                timestamp: Date.now(),
+                nearbyStats: { zombies: 0, soldiers: 0, civilians: 0 },
+                isAnalyzing: true
+            };
+        } else {
+            b.analysis.isAnalyzing = true;
+        }
+        
+        // Sync to show scanning state in UI
+        setBuildingsSyncTrigger(prev => prev + 1);
+        onUpdateState({...stateRef.current});
+
+        // Show initial intent in log
+        addLog({
+            sender: '指挥部',
+            text: `正在启动对 ${b.name} 的深度扫描，请稍候...`
+        });
+
+        const pos = b.geometry[0];
+        
+        try {
+            // Get geographic context
+            const [locationInfo, nearbyFeatures] = await Promise.all([
+                mapDataService.getLocationInfo(pos),
+                mapDataService.getNearbyFeatures(pos)
+            ]);
+
+            // Get tactical stats
+            const radius = 0.003;
+            const nearbyEntities = entitiesRef.current.filter(e => !e.isDead && getVecDistance(e.position, pos) < radius);
+            const stats = {
+                zombies: nearbyEntities.filter(e => e.type === EntityType.ZOMBIE).length,
+                soldiers: nearbyEntities.filter(e => e.type === EntityType.SOLDIER).length,
+                civilians: nearbyEntities.filter(e => e.type === EntityType.CIVILIAN).length
+            };
+
+            // Call AI
+            const analysisResult = await generateTacticalAnalysis(b, nearbyFeatures, locationInfo, stats);
+
+            // Update building
+            b.analysis = {
+                ...analysisResult,
+                timestamp: Date.now(),
+                nearbyStats: stats,
+                cooldownEnd: Date.now() + GAME_CONSTANTS.COOLDOWN_TACTICAL_ANALYSIS,
+                isAnalyzing: false
+            };
+            
+            // Log completion
+            addLog({
+                sender: '战术分析AI',
+                text: `对 ${b.name} 的深度扫描已完成。数据已同步，注意查收生存指南。`
+            });
+            
+            // Sync triggers
+            setBuildingsSyncTrigger(prev => prev + 1);
+            onUpdateState({...stateRef.current});
+        } catch (error) {
+            console.error("Tactical Analysis Error:", error);
+            if (b.analysis) b.analysis.isAnalyzing = false;
+            addLog({
+                sender: '指挥部',
+                text: `对 ${b.name} 的扫描请求遇到技术障碍。`
+            });
+            setBuildingsSyncTrigger(prev => prev + 1);
+            onUpdateState({...stateRef.current});
+        }
+    }
+  }));
 
   const fetchBuildings = useCallback((pos: Coordinates) => {
     mapDataService.getBuildingGeometries(pos).then(geoms => {
@@ -1519,6 +1658,6 @@ const GameMap: React.FC<GameMapProps> = ({ selectedTool, onSelectTool, isPaused,
       ))}
     </MapContainer>
   );
-};
+});
 
 export default GameMap;

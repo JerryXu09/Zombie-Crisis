@@ -5,6 +5,18 @@ export interface Building {
   tags: Record<string, string>;
   name: string;
   type: string;
+  analysis?: {
+    survivalGuide: string;
+    tacticalReport: string;
+    timestamp: number;
+    nearbyStats: {
+      zombies: number;
+      soldiers: number;
+      civilians: number;
+    };
+    cooldownEnd?: number;
+    isAnalyzing?: boolean;
+  };
 }
 
 export enum BGMState {
@@ -32,7 +44,8 @@ export enum ToolType {
   SUPPLY_DROP = 'SUPPLY_DROP', // Arms civilians
   SPEC_OPS = 'SPEC_OPS',       // Spawns soldiers
   AIRSTRIKE = 'AIRSTRIKE',     // Kills zombies in area
-  MEDIC_TEAM = 'MEDIC_TEAM'    // Spawns medics to cure trapped zombies
+  MEDIC_TEAM = 'MEDIC_TEAM',    // Spawns medics to cure trapped zombies
+  TACTICAL_ANALYSIS = 'TACTICAL_ANALYSIS' // AI tactical analysis for buildings
 }
 
 export enum WeaponType {

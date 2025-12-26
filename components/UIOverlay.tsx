@@ -14,9 +14,10 @@ interface UIOverlayProps {
   onLocateEntity: (id: string) => void;
   followingEntityId: string | null;
   onToggleFollow: (id: string) => void;
+  onAnalyzeBuilding?: (id: string) => void;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedTool, onSelectTool, onTogglePause, onReset, onLocateEntity, followingEntityId, onToggleFollow }) => {
+const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedTool, onSelectTool, onTogglePause, onReset, onLocateEntity, followingEntityId, onToggleFollow, onAnalyzeBuilding }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const [size, setSize] = useState({ width: 384, height: 224 });
@@ -162,6 +163,12 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
     const b = gameState.selectedBuilding;
     const analysis = getTacticalAnalysis(b);
 
+    const now = Date.now();
+    const cooldownEnd = b.analysis?.cooldownEnd || 0;
+    const remaining = Math.max(0, Math.ceil((cooldownEnd - now) / 1000));
+    const onCooldown = remaining > 0;
+    const isAnalyzing = b.analysis?.isAnalyzing || false;
+
     return (
       <div className="absolute top-28 right-4 w-72 bg-slate-900/95 backdrop-blur-xl border border-yellow-500/30 rounded-xl p-4 shadow-[0_0_30px_rgba(234,179,8,0.15)] z-30 pointer-events-auto transition-all duration-300 animate-fade-in border-t-yellow-500/60 border-t-2">
           <div className="flex items-center justify-between border-b border-slate-700/50 pb-2 mb-4">
@@ -218,9 +225,53 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                   </div>
               </div>
 
+              {/* Tactical Analysis Section */}
+              <div className="pt-2 border-t border-slate-700/50 space-y-3">
+                  <button 
+                    onClick={() => { audioService.playSound(SoundType.UI_CLICK); onAnalyzeBuilding?.(b.id); }}
+                    disabled={onCooldown || isAnalyzing}
+                    className={`w-full py-2 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-2 border ${
+                        (onCooldown || isAnalyzing)
+                        ? 'bg-slate-800/50 border-slate-700 text-slate-500 cursor-not-allowed' 
+                        : 'bg-yellow-500/10 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/20 active:scale-95 shadow-[0_0_15px_rgba(234,179,8,0.1)]'
+                    }`}
+                  >
+                      {isAnalyzing ? '🛰️ 深度扫描中...' : (onCooldown ? `🛰️ 扫描冷却中 (${remaining}s)` : '🤖 发起深度战术分析')}
+                  </button>
+
+                  {b.analysis && (
+                      <div className="space-y-3 animate-fade-in">
+                          <div className="bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg space-y-2">
+                              <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">生存指南 (SURVIVAL GUIDE)</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
+                                  {b.analysis.survivalGuide}
+                              </p>
+                          </div>
+
+                          <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg space-y-2">
+                               <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">实战报告 (TACTICAL REPORT)</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-medium italic">
+                                  {b.analysis.tacticalReport}
+                              </p>
+                              <div className="flex justify-between items-center pt-1 border-t border-slate-700/50">
+                                  <span className="text-[9px] font-mono text-slate-400">区域侦测:</span>
+                                  <div className="flex gap-2 text-[9px] font-mono">
+                                      <span className="text-red-400">Z:{b.analysis.nearbyStats.zombies}</span>
+                                      <span className="text-blue-400">S:{b.analysis.nearbyStats.soldiers}</span>
+                                      <span className="text-emerald-400">C:{b.analysis.nearbyStats.civilians}</span>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
-      );
+      </div>
+    );
   };
 
   const renderInspector = () => {

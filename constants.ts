@@ -60,6 +60,7 @@ export const GAME_CONSTANTS = {
   COOLDOWN_SPECOPS: 60000,   // 60s
   COOLDOWN_AIRSTRIKE: 120000,// 120s
   COOLDOWN_MEDIC: 80000,     // 80s
+  COOLDOWN_TACTICAL_ANALYSIS: 60000, // 60s
 
   // Mechanics
   NET_DURATION: 30000, // 30s (in ms, convert to ticks in logic)
