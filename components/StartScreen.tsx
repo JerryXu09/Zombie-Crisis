@@ -4,6 +4,7 @@ import { Coordinates } from '../types';
 import { mapDataService } from '../services/mapDataService';
 import { audioService } from '../services/audioService';
 import { SoundType } from '../types';
+import pkg from '../package.json';
 
 interface StartScreenProps {
   onStartGame: (coords: Coordinates) => void;
@@ -217,7 +218,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame }) => {
             </svg>
             </a>
             <div className="px-3 py-1 bg-blue-900/30 border border-blue-500/50 rounded text-blue-400 font-mono text-xs tracking-wider">
-            {t('version')} 1.4.0
+            {t('version')} {pkg.version}
             </div>
         </div>
       </div>
