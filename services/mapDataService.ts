@@ -15,6 +15,8 @@ export interface LocationInfo {
   neighborhood?: string;
   feature?: string; // specific building/POI name
   type?: string;    // highway, shop, etc.
+  category?: string;
+  isUrban: boolean;
 }
 
 // Round coordinates to ~10m precision to increase cache hits
@@ -82,7 +84,7 @@ export const mapDataService = {
       try {
         return JSON.parse(cached.name) as LocationInfo;
       } catch {
-        return { name: cached.name };
+        return { name: cached.name, isUrban: false };
       }
     }
 
@@ -110,7 +112,9 @@ export const mapDataService = {
         suburb: address.suburb || address.neighborhood || address.neighbourhood,
         neighborhood: address.neighborhood || address.neighbourhood,
         feature: data.name || address.amenity || address.shop || address.tourism || address.building,
-        type: data.type
+        type: data.type,
+        category: data.category,
+        isUrban: !!(address.city || address.town || address.village || address.suburb || address.neighbourhood || address.residential || address.road || address.pedestrian)
       };
 
       // Flatten name to something short and readable
@@ -169,6 +173,32 @@ export const mapDataService = {
       return buildings;
     } catch (error) {
       console.error('getBuildingGeometries Error:', error);
+      return [];
+    }
+  },
+
+  async searchCities(query: string): Promise<any[]> {
+    try {
+      await throttleRequest();
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Accept-Language': 'zh-CN,zh;q=0.9',
+          'User-Agent': 'Zombie-Crisis-Game-Bot'
+        }
+      });
+
+      if (!response.ok) throw new Error('Network response was not ok');
+      
+      const data = await response.json();
+      return data.map((item: any) => ({
+        name: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon)
+      }));
+    } catch (error) {
+      console.error('searchCities Error:', error);
       return [];
     }
   }

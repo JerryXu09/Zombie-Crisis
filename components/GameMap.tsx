@@ -344,6 +344,7 @@ interface GameMapProps {
   onBuildingSelect: (id: string | null) => void;
   followingEntityId: string | null;
   onCancelFollow: () => void;
+  initialCenter?: Coordinates;
 }
 
 const MapEvents: React.FC<{ 
@@ -407,7 +408,7 @@ const LocateController: React.FC<{ followingEntityId: string | null, entities: G
 };
 
 const GameMap = forwardRef<GameMapRef, GameMapProps>((props, ref) => {
-  const { selectedTool, onSelectTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, selectedBuildingId, onBuildingSelect, followingEntityId, onCancelFollow } = props;
+  const { selectedTool, onSelectTool, isPaused, onUpdateState, onAddLog, initialState, selectedEntityId, onEntitySelect, selectedBuildingId, onBuildingSelect, followingEntityId, onCancelFollow, initialCenter } = props;
   const [centerPos, setCenterPos] = useState<Coordinates>(DEFAULT_LOCATION);
   const [entities, setEntities] = useState<GameEntity[]>([]);
   const [effects, setEffects] = useState<VisualEffect[]>([]); 
@@ -670,35 +671,30 @@ const GameMap = forwardRef<GameMapRef, GameMapProps>((props, ref) => {
   }, [initialized, isPaused]);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const startPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setCenterPos(startPos);
-        initPopulation(startPos);
-        setInitialized(true);
-
-        // Fetch initial buildings
-        fetchBuildings(startPos);
-
-        mapDataService.getLocationInfo(startPos).then(info => {
-          generateRadioChatter(stateRef.current, startPos, 'START', info || undefined).then(text => {
-            addLog({ sender: '指挥部', text });
-          });
+    const handleInit = (pos: Coordinates) => {
+      setCenterPos(pos);
+      initPopulation(pos);
+      setInitialized(true);
+      fetchBuildings(pos);
+      mapDataService.getLocationInfo(pos).then(info => {
+        generateRadioChatter(stateRef.current, pos, 'START', info || undefined).then(text => {
+          addLog({ sender: '指挥部', text });
         });
-      },
-      (err) => {
-        console.warn("Geolocation failed", err);
-        const startPos = DEFAULT_LOCATION;
-        initPopulation(startPos);
-        setInitialized(true);
-        mapDataService.getLocationInfo(startPos).then(info => {
-          generateRadioChatter(stateRef.current, startPos, 'START', info || undefined).then(text => {
-            addLog({ sender: '指挥部', text });
-          });
-        });
-      }
-    );
-  }, []);
+      });
+    };
+
+    if (initialCenter) {
+      handleInit(initialCenter);
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => handleInit({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => {
+          console.warn("Geolocation failed", err);
+          handleInit(DEFAULT_LOCATION);
+        }
+      );
+    }
+  }, [initialCenter]);
 
   const initPopulation = (center: Coordinates) => {
     const newEntities: GameEntity[] = [];

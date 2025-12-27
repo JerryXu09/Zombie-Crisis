@@ -2,9 +2,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameMap, { GameMapRef } from './components/GameMap';
 import UIOverlay from './components/UIOverlay';
-import { GameState, RadioMessage, ToolType, Building } from './types';
+import { GameState, RadioMessage, ToolType, Building, Coordinates } from './types';
 import { GAME_CONSTANTS } from './constants';
 import { audioService } from './services/audioService';
+import StartScreen from './components/StartScreen';
 
 const App: React.FC = () => {
   const [gameId, setGameId] = useState(0); 
@@ -28,6 +29,8 @@ const App: React.FC = () => {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [followingEntityId, setFollowingEntityId] = useState<string | null>(null);
+  const [showStartScreen, setShowStartScreen] = useState(true);
+  const [initialCenter, setInitialCenter] = useState<Coordinates | undefined>(undefined);
 
   useEffect(() => {
     const initAudio = () => {
@@ -42,6 +45,12 @@ const App: React.FC = () => {
         window.removeEventListener('keydown', initAudio);
     };
   }, []);
+
+  const handleStartGame = (coords: Coordinates) => {
+    setInitialCenter(coords);
+    setShowStartScreen(false);
+    audioService.startBGM();
+  };
 
   const handleStateUpdate = useCallback((newState: GameState) => {
     setGameState(prev => ({
@@ -78,6 +87,8 @@ const App: React.FC = () => {
 
   const handleResetGame = () => {
     setGameId(prev => prev + 1);
+    setShowStartScreen(true);
+    setInitialCenter(undefined);
     setGameState({
       isPlaying: true,
       isPaused: false,
@@ -99,51 +110,58 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-full h-screen bg-gray-900 overflow-hidden">
-      <GameMap 
-        key={gameId} 
-        ref={gameMapRef}
-        selectedTool={selectedTool}
-        onSelectTool={setSelectedTool}
-        isPaused={gameState.isPaused}
-        initialState={gameState}
-        onUpdateState={handleStateUpdate}
-        onAddLog={handleAddLog}
-        selectedEntityId={selectedEntityId}
-        onEntitySelect={(id) => {
-            setSelectedEntityId(id);
-            if (id) setSelectedBuildingId(null);
-        }}
-        selectedBuildingId={selectedBuildingId}
-        onBuildingSelect={(id) => {
-            setSelectedBuildingId(id);
-            if (id) setSelectedEntityId(null);
-        }}
-        followingEntityId={followingEntityId}
-        onCancelFollow={() => setFollowingEntityId(null)}
-      />
-      
-      <UIOverlay 
-        gameState={gameState}
-        radioLogs={radioLogs}
-        selectedTool={selectedTool}
-        onSelectTool={setSelectedTool}
-        onTogglePause={togglePause}
-        onReset={handleResetGame}
-        onLocateEntity={(id) => { 
-            setFollowingEntityId(id); 
-            setSelectedEntityId(id); 
-        }}
-        followingEntityId={followingEntityId}
-        onToggleFollow={(id) => {
-            setFollowingEntityId(prev => prev === id ? null : id);
-        }}
-        onAnalyzeBuilding={(id) => {
-            gameMapRef.current?.analyzeBuilding(id);
-        }}
-        onScavengeBuilding={(id) => {
-            gameMapRef.current?.scavengeBuilding(id);
-        }}
-      />
+      {showStartScreen ? (
+        <StartScreen onStartGame={handleStartGame} />
+      ) : (
+        <>
+          <GameMap 
+            key={gameId} 
+            ref={gameMapRef}
+            selectedTool={selectedTool}
+            onSelectTool={setSelectedTool}
+            isPaused={gameState.isPaused}
+            initialState={gameState}
+            onUpdateState={handleStateUpdate}
+            onAddLog={handleAddLog}
+            selectedEntityId={selectedEntityId}
+            onEntitySelect={(id) => {
+                setSelectedEntityId(id);
+                if (id) setSelectedBuildingId(null);
+            }}
+            selectedBuildingId={selectedBuildingId}
+            onBuildingSelect={(id) => {
+                setSelectedBuildingId(id);
+                if (id) setSelectedEntityId(null);
+            }}
+            followingEntityId={followingEntityId}
+            onCancelFollow={() => setFollowingEntityId(null)}
+            initialCenter={initialCenter}
+          />
+          
+          <UIOverlay 
+            gameState={gameState}
+            radioLogs={radioLogs}
+            selectedTool={selectedTool}
+            onSelectTool={setSelectedTool}
+            onTogglePause={togglePause}
+            onReset={handleResetGame}
+            onLocateEntity={(id) => { 
+                setFollowingEntityId(id); 
+                setSelectedEntityId(id); 
+            }}
+            followingEntityId={followingEntityId}
+            onToggleFollow={(id) => {
+                setFollowingEntityId(prev => prev === id ? null : id);
+            }}
+            onAnalyzeBuilding={(id) => {
+                gameMapRef.current?.analyzeBuilding(id);
+            }}
+            onScavengeBuilding={(id) => {
+                gameMapRef.current?.scavengeBuilding(id);
+            }}
+          />
+        </>
+      )}
     </div>
   );
 };
