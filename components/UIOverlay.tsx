@@ -371,7 +371,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                 
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold bg-slate-800 px-2 py-0.5 rounded text-slate-300">
-                        {ent.type === EntityType.ZOMBIE ? t('type_zombie') : ent.type === EntityType.SOLDIER ? t('type_soldier') : t('type_civilian')}
+                        {ent.type === EntityType.ZOMBIE ? t('type_zombie') : ent.type === EntityType.SOLDIER ? t('type_soldier') : (ent.isArmed ? t('armed_civilian') : t('type_civilian'))}
                     </span>
                     {ent.isMedic && <span className="text-[10px] font-bold bg-white text-red-600 px-2 py-0.5 rounded">{t('medic')}</span>}
                     {ent.isTrapped && <span className="text-[10px] font-bold bg-cyan-500 text-black px-2 py-0.5 rounded animate-pulse">{t('trapped', { s: (ent.trappedTimer/1000).toFixed(1) })}</span>}
@@ -380,8 +380,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, radioLogs, selectedToo
                 {ent.isArmed && getWeaponInfo(ent) && (
                     <div className="bg-slate-800/50 border border-slate-700 p-2 rounded flex items-center justify-between mt-1">
                         <div className="flex flex-col">
-                             <span className="text-[10px] text-yellow-400 font-bold uppercase">{getWeaponInfo(ent).name}</span>
-                             <span className="text-[8px] text-slate-400">{getWeaponInfo(ent).description}</span>
+                             <span className="text-[10px] text-yellow-400 font-bold uppercase">{t(getWeaponInfo(ent).nameKey)}</span>
+                             <span className="text-[8px] text-slate-400">{t(getWeaponInfo(ent).descKey)}</span>
                         </div>
                         <div className="w-2 h-2 rounded-full" style={{backgroundColor: getWeaponInfo(ent).color}}></div>
                     </div>

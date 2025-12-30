@@ -1290,7 +1290,7 @@ const GameMap = forwardRef<GameMapRef, GameMapProps>((props, ref) => {
                   entity.isArmed = true;
                   entity.weaponType = nearestWeapon.type;
                   if (entity.weaponType === WeaponType.ROCKET) entity.ammo = GAME_CONSTANTS.ROCKET_AMMO_LIMIT;
-                   const weaponName = i18n.t(`weapons.${entity.weaponType}`);
+                   const weaponName = i18n.t(`weapons.${entity.weaponType.toLowerCase()}`);
                    entity.thought = i18n.t('thoughts.PICKED_UP_WEAPON', { weaponName });
                   entity.moodIcon = "🔫";
                   entity.moodTimer = GAME_CONSTANTS.MOOD_DURATION;
