@@ -2029,7 +2029,7 @@ const GameMap = forwardRef<GameMapRef, GameMapProps>((props, ref) => {
     >
       <TileLayer
         attribution='&copy; OSM'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        url="https://test.sbzjl.eu.org/proxy/{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         className="map-tiles"
       />
       <MapEvents 
