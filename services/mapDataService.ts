@@ -91,7 +91,7 @@ export const mapDataService = {
 
     try {
       await throttleRequest();
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json&zoom=18&addressdetails=1`;
+      const url = `https://test.sbzjl.eu.org/proxy/nominatim.openstreetmap.org/reverse?lat=${coords.lat}&lon=${coords.lng}&format=json&zoom=18&addressdetails=1`;
       
       const response = await fetch(url, {
         headers: {
@@ -181,7 +181,7 @@ export const mapDataService = {
   async searchCities(query: string): Promise<any[]> {
     try {
       await throttleRequest();
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
+      const url = `https://test.sbzjl.eu.org/proxy/nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
       
       const response = await fetch(url, {
         headers: {
